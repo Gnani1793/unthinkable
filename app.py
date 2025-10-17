@@ -22,13 +22,7 @@ genai.configure(api_key=GOOGLE_API_KEY)
 app = Flask(__name__)
 
 # --- Load Local Whisper Model ---
-try:
-    print("Loading local Whisper model...")
-    transcriber = pipeline("automatic-speech-recognition", model="openai/whisper-tiny.en")
-    print("✅ Local Whisper model loaded successfully.")
-except Exception as e:
-    print(f"❌ Error loading local Whisper model: {e}")
-    transcriber = None
+
 
 # Configure upload folder
 UPLOAD_FOLDER = 'uploads'
@@ -99,4 +93,6 @@ def index():
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
+
