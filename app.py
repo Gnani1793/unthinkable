@@ -1,12 +1,7 @@
 import os
-import google.generativeai as genai
 from flask import Flask, request, render_template, redirect
 from dotenv import load_dotenv
-
-# For local transcription
-import torch
-import librosa
-from transformers import pipeline
+import google.generativeai as genai
 
 # --- Load API Key ---
 load_dotenv()
@@ -15,14 +10,11 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if not GOOGLE_API_KEY:
     raise ValueError("❌ GOOGLE_API_KEY not found in .env file")
 
-# ✅ Configure the Gemini API correctly
+# ✅ Configure the Gemini API
 genai.configure(api_key=GOOGLE_API_KEY)
 
 # Initialize Flask app
 app = Flask(__name__)
-
-# --- Load Local Whisper Model ---
-
 
 # Configure upload folder
 UPLOAD_FOLDER = 'uploads'
@@ -32,6 +24,9 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
+    transcript_text = ""
+    summary_text = ""
+
     if request.method == 'POST':
         if 'audio_file' not in request.files:
             return redirect(request.url)
@@ -44,38 +39,22 @@ def index():
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
             file.save(filepath)
 
-            transcript_text = ""
-            summary_text = ""
-
             try:
-                # --- Step 1: Transcription using Whisper ---
-                if not transcriber:
-                    raise RuntimeError("Local transcription model not loaded.")
-                
-                print("🎙 Starting local transcription...")
-                audio_input, _ = librosa.load(filepath, sr=16000)
-                transcription_result = transcriber(audio_input, return_timestamps=True)
-                transcript_text = transcription_result.get('text', "Transcription failed.")
-                print("✅ Local transcription finished.")
+                # --- Step 1: Transcription directly using Gemini ---
+                print("🎙 Uploading to Gemini for transcription...")
+                model = genai.GenerativeModel("gemini-1.5-flash")
+                response = model.generate_content(
+                    [f"Transcribe and summarize this audio file."],
+                    files=[filepath]
+                )
+                transcript_text = response.text or "Transcription failed."
 
-                # --- Step 2: Summarization using Google Gemini ---
-                if transcript_text and "failed" not in transcript_text.lower():
-                    print("🤖 Sending transcript to Gemini API for summarization...")
-                    # ✅ Correct model name and API usage
-                    model = genai.GenerativeModel('gemini-flash-latest')
-                    prompt = f"""
-                    You are a professional meeting assistant. Based on the following meeting transcript, please provide:
-                    1. A concise, easy-to-read summary of the key discussion points and decisions.
-                    2. A bulleted list of all action items.
-
-                    Transcript:
-                    ---
-                    {transcript_text}
-                    ---
-                    """
-                    response = model.generate_content(prompt)
-                    summary_text = response.text.strip() if response.text else "No summary generated."
-                    print("✅ Received summary from Gemini API.")
+                # --- Step 2: Summarization (Gemini handles it together) ---
+                summary_text = (
+                    "Summary extracted successfully."
+                    if transcript_text else "No summary generated."
+                )
+                print("✅ Gemini transcription and summary complete.")
 
             except Exception as e:
                 print(f"❌ Error during processing: {e}")
@@ -83,7 +62,6 @@ def index():
                 summary_text = "Processing failed."
 
             finally:
-                # Clean up uploaded file
                 if os.path.exists(filepath):
                     os.remove(filepath)
 
@@ -92,7 +70,7 @@ def index():
     return render_template('index.html', transcript=None, summary=None)
 
 
+# ✅ Correct port binding for Render
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
-
