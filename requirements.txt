@@ -1,0 +1,6 @@
+flask
+transformers
+torch
+librosa
+google-generativeai
+python-dotenv
